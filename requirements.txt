@@ -1,0 +1,21 @@
+# ── Gap 분석 (step1~step3) ──────────────────────────────
+# 표준 라이브러리만 사용. 추가 설치 없이 동작한다.
+
+# ── 대시보드 ────────────────────────────────────────────
+streamlit>=1.50
+pandas
+matplotlib
+
+# ── 모델 학습·추론 (best_model.pt 필요, 별도 요청) ──────
+torch>=2.1
+transformers>=4.40
+scikit-learn
+numpy
+tqdm
+
+# ── 데이터 수집·라벨링 (API 키 필요) ────────────────────
+google-api-python-client   # YouTube Data API v3  (YOUTUBE_API_KEY)
+anthropic                  # Claude Batch 오토라벨링 (ANTHROPIC_API_KEY)
+openpyxl                   # 골드 라벨링 시트 생성·병합
+beautifulsoup4
+requests

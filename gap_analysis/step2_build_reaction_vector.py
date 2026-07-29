@@ -1,116 +1,139 @@
+"""
+step2 — 반응 분포 산출 (발명 명세서 5.(4) 기준선 / 5.(5) 대상, 수식 ①②③)
+
+이미 추론이 끝난 `*_me5_sigmoid.jsonl`(레코드마다 sigmoid 확률 dict 보유)을 받아
+라벨별 반응 분포 p(l)을 산출한다. 기준선(baseline)과 대상(target)은 같은 함수·같은
+임계값·같은 정규화로 처리되므로 그대로 대비 가능하다.
+
+    ① hit(c,l) = 1[ σ(z_c,l) ≥ τ ]        (기본 τ = 0.80)
+    ② H(l) = Σ_c hit(c,l),  N = Σ_{l∈L} H(l)
+    ③ p(l) = H(l) / N
+
+주의 — 분모는 '댓글 수'가 아니라 '분석 대상 라벨의 전체 히트 수 N'이다. 멀티라벨이라
+한 댓글이 여러 라벨에 동시에 히트할 수 있어 Σ p(l) = 1 이 되도록 하는 정규화다.
+
+사용 예:
+  # 기준선 (8팀 전체 코퍼스)
+  python gap_analysis/step2_build_reaction_vector.py \
+      --sigmoid 04_reaction/전체/OUTPUT/corpus_me5_sigmoid.jsonl \
+      --out gap_analysis/out/corpus_reaction_080_9label.json
+
+  # 대상 (환절기) + 일별 추이
+  python gap_analysis/step2_build_reaction_vector.py \
+      --sigmoid 04_reaction/환절기/output/hwanjeolgi_me5_sigmoid.jsonl \
+      --out gap_analysis/out/hwanjeolgi_reaction_080_9label.json --by-date
+"""
+import argparse
 import json
 import os
-import sys
-import argparse
-import random
-from collections import defaultdict
+from collections import Counter, defaultdict
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "model_training_script"))
-import config
-
-CORPUS = os.path.join(os.path.dirname(__file__), "..", "01_corpus", "corpus_labeled_1.jsonl")
-OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "03_doc_probs", "finetuned")
-
-
-def build_from_labels(artist, n_samples, seed):
-    random.seed(seed)
-    with open(CORPUS, encoding="utf-8") as f:
-        all_rows = [json.loads(l) for l in f if l.strip()]
-
-    pool = [r for r in all_rows if r.get("artist") == artist] if artist else all_rows
-    if len(pool) < n_samples:
-        print(f"경고: {artist} 댓글이 {len(pool)}개뿐 (요청 {n_samples}개)")
-        samples = pool
-    else:
-        samples = random.sample(pool, n_samples)
-
-    label_count = defaultdict(int)
-    for row in samples:
-        for lbl in row.get("label", row.get("labels", [])):
-            label_count[lbl] += 1
-
-    n = len(samples)
-    reaction_scores = {lbl: label_count.get(lbl, 0) / n for lbl in config.LABELS}
-
-    return reaction_scores, n, samples
+# 분석 대상 라벨 집합 L — 노이즈 라벨과 분석 제외 라벨을 뺀 9라벨 (명세서 실시예)
+LABELS_9 = ["장기_팬덤", "보컬_라이브", "신규_유입", "밴드_정체성", "위로_공감",
+            "연주_악기", "이별_감성", "청량_여름", "음악성"]
+# 초기 실험용 대안 집합 (최종 결과는 9label 기준)
+LABELS_8 = ["비주얼_멤버매력", "보컬_라이브", "밴드_정체성", "위로_공감",
+            "연주_악기", "이별_감성", "청량_여름", "음악성"]
+LABELS_7 = [l for l in LABELS_8 if l != "비주얼_멤버매력"]
+LABEL_SETS = {"9label": LABELS_9, "8label": LABELS_8, "7label": LABELS_7}
 
 
-def build_from_model(samples, model_dir, gpu):
-    import torch
-    from transformers import AutoTokenizer
-    from model import RoBERTaMultiLabel
-    from torch.utils.data import DataLoader, Dataset
-
-    device = torch.device(f"cuda:{gpu}" if torch.cuda.is_available() else "cpu")
-    tokenizer = AutoTokenizer.from_pretrained(config.MODEL_NAME)
-    model = RoBERTaMultiLabel(config.MODEL_NAME, config.NUM_LABELS).to(device)
-    model.load_state_dict(torch.load(os.path.join(model_dir, "best_model.pt"), map_location=device))
-    model.eval()
-
-    texts = [r["text"] for r in samples]
-
-    class TextDataset(Dataset):
-        def __init__(self, texts):
-            self.texts = texts
-        def __len__(self): return len(self.texts)
-        def __getitem__(self, idx):
-            enc = tokenizer(self.texts[idx], max_length=config.MAX_LEN,
-                            padding="max_length", truncation=True, return_tensors="pt")
-            return {"input_ids": enc["input_ids"].squeeze(0),
-                    "attention_mask": enc["attention_mask"].squeeze(0)}
-
-    loader = DataLoader(TextDataset(texts), batch_size=config.BATCH_SIZE)
-    all_probs = []
-    with torch.no_grad():
-        for batch in loader:
-            logits = model(batch["input_ids"].to(device), batch["attention_mask"].to(device))
-            probs = torch.sigmoid(logits).cpu().numpy()
-            all_probs.extend(probs.tolist())
-
-    import numpy as np
-    mean_probs = np.mean(all_probs, axis=0)
-    return {lbl: float(mean_probs[i]) for i, lbl in enumerate(config.LABELS)}
+def load_sigmoid(path):
+    rows = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    if not rows:
+        raise ValueError(f"{path} 에서 읽은 레코드가 0개")
+    if "sigmoid" not in rows[0]:
+        raise KeyError(f"{path} 레코드에 'sigmoid' 필드가 없음 — run_*_sigmoid.py 산출물이 맞는지 확인")
+    return rows
 
 
-def parse_args():
-    p = argparse.ArgumentParser()
-    p.add_argument("--artist", type=str, default="엔플라잉")
-    p.add_argument("--n", type=int, default=1000)
-    p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--method", choices=["label", "model"], default="label",
-                   help="label=기존 라벨 빈도, model=ME5-large v2 재추론")
-    p.add_argument("--model-dir", type=str, default=None)
-    p.add_argument("--gpu", type=int, default=0)
-    p.add_argument("--out-name", type=str, default=None)
-    return p.parse_args()
+def distribution(rows, labels, tau):
+    """수식 ①②③ — 히트 판정 → 히트 수 집계 → 전체 히트 수로 정규화."""
+    hits, n_hit, n_multi = [], 0, 0
+    for r in rows:
+        sig = r.get("sigmoid", {})
+        matched = [l for l in labels if sig.get(l, 0.0) >= tau]   # ① ≥ τ
+        if matched:
+            hits.extend(matched)
+            n_hit += 1
+            if len(matched) >= 2:
+                n_multi += 1
+
+    counts = Counter(hits)
+    total = len(hits)                                            # ② N
+    if total == 0:
+        raise ValueError(f"임계값 {tau} 에서 히트가 하나도 없음 — τ를 낮추세요")
+    pct = {l: round(counts.get(l, 0) / total, 4) for l in labels}  # ③ p(l)
+
+    return {
+        "method": f"sigmoid_threshold_{tau}",
+        "threshold": tau,
+        "n_total": len(rows),
+        "n_comments_hit": n_hit,
+        "n_multi_hit": n_multi,
+        "n_label_hits": total,
+        "labels": labels,
+        "reaction_pct": pct,
+        "reaction_pct_percent": {l: round(v * 100, 2) for l, v in pct.items()},
+        "hit_counts": {l: counts.get(l, 0) for l in labels},
+    }
+
+
+def by_date(rows, labels, tau):
+    """일별 라벨 히트 수 — 명세서 5.(7)의 '게시 시점 메타데이터를 이용한 일별 반응 추이'."""
+    daily = defaultdict(lambda: {l: 0 for l in labels})
+    skipped = 0
+    for r in rows:
+        stamp = r.get("published_at") or r.get("date")
+        if not stamp:
+            skipped += 1
+            continue
+        day = str(stamp)[:10]
+        sig = r.get("sigmoid", {})
+        for l in labels:
+            if sig.get(l, 0.0) >= tau:
+                daily[day][l] += 1
+    if skipped:
+        print(f"  ! published_at 없는 레코드 {skipped:,}개는 일별 추이에서 제외")
+    return {"threshold": tau, "labels": labels, "by_date": dict(sorted(daily.items()))}
 
 
 def main():
-    args = parse_args()
-    reaction_scores, n, samples = build_from_labels(args.artist, args.n, args.seed)
+    p = argparse.ArgumentParser()
+    p.add_argument("--sigmoid", required=True, help="*_me5_sigmoid.jsonl 경로")
+    p.add_argument("--out", required=True, help="출력 JSON 경로")
+    p.add_argument("--tau", type=float, default=0.80, help="확률 임계값 τ (기본 0.80)")
+    p.add_argument("--label-set", choices=sorted(LABEL_SETS), default="9label")
+    p.add_argument("--by-date", action="store_true", help="일별 추이 JSON도 함께 저장")
+    args = p.parse_args()
 
-    if args.method == "model":
-        if not args.model_dir:
-            raise ValueError("--model-dir 필요")
-        print(f"모델 추론 중... ({n}개 댓글)")
-        reaction_scores = build_from_model(samples, args.model_dir, args.gpu)
+    labels = LABEL_SETS[args.label_set]
+    rows = load_sigmoid(args.sigmoid)
+    print(f"{os.path.basename(args.sigmoid)} — {len(rows):,}개 레코드, τ={args.tau}, {args.label_set}")
 
-    out_name = args.out_name or f"reaction_{args.artist}_{args.method}_{n}.json"
-    out_path = os.path.join(OUT_DIR, out_name)
-    out = {
-        "artist": args.artist,
-        "n_comments": n,
-        "method": args.method,
-        "reaction_scores": reaction_scores,
-    }
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(out, f, ensure_ascii=False, indent=2)
+    result = distribution(rows, labels, args.tau)
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
+    with open(args.out, "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+    print(f"✓ {args.out}")
+    print(f"  히트 댓글 {result['n_comments_hit']:,} / 전체 히트 N={result['n_label_hits']:,}")
+    for l, v in sorted(result["reaction_pct_percent"].items(), key=lambda x: -x[1]):
+        print(f"    {l:18s} {v:5.2f}%  {'█' * int(v / 2)}")
 
-    print(f"\n✓ {out_name} 저장 ({n}개 댓글, method={args.method})")
-    print("\n[라벨별 반응 비율]")
-    for lbl, score in sorted(reaction_scores.items(), key=lambda x: -x[1]):
-        bar = "█" * int(score * 20)
-        print(f"  {lbl:18s} {score:.3f} {bar}")
+    if args.by_date:
+        d_path = args.out.replace(".json", "_by_date.json")
+        with open(d_path, "w", encoding="utf-8") as f:
+            json.dump(by_date(rows, labels, args.tau), f, ensure_ascii=False, indent=2)
+        print(f"✓ {d_path}")
 
 
 if __name__ == "__main__":
