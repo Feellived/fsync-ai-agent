@@ -20,7 +20,7 @@ OUT_SIG = OUT_DIR / "nflying_me5_sigmoid.jsonl"
 LABELS_9 = ['장기_팬덤','보컬_라이브','신규_유입','밴드_정체성','위로_공감','연주_악기','이별_감성','청량_여름','음악성']
 LABELS_8 = ['비주얼_멤버매력','보컬_라이브','밴드_정체성','위로_공감','연주_악기','이별_감성','청량_여름','음악성']
 
-device     = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device     = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model_name = 'intfloat/multilingual-e5-large'
 tokenizer  = AutoTokenizer.from_pretrained(model_name)
 model      = RoBERTaMultiLabel(model_name, config.NUM_LABELS).to(device)
@@ -69,7 +69,7 @@ print(f"\n✓ {OUT_SIG} ({len(results):,}개)", flush=True)
 def save_thresh(rows, label_set, out_path, thresh):
     hits, n_hit, n_multi = [], 0, 0
     for r in rows:
-        matched = [l for l in label_set if r['sigmoid'].get(l,0) > thresh]
+        matched = [l for l in label_set if r["sigmoid"].get(l,0) >= thresh]
         if matched:
             hits.extend(matched); n_hit += 1
             if len(matched) >= 2: n_multi += 1

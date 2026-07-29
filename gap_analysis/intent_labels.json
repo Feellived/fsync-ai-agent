@@ -1,0 +1,63 @@
+{
+  "_comment": [
+    "발명 명세서 5.(6) '의도 라벨 추출 단계'의 산출물 스펙.",
+    "제작 주체의 기획 문서에서 읽어낸 의도 라벨(intended label)과 강조 강도(high/med/low)만 담는다.",
+    "기획 문서 원문·인용문·페이지 번호는 대외비이므로 이 파일에 포함하지 않는다.",
+    "여기에 명시되지 않은 라벨은 level='none'(의도 없음)으로 간주한다."
+  ],
+  "_levels": ["high", "med", "low", "none"],
+  "releases": {
+    "hwanjeolgi": {
+      "album_title": "환절기 (換節期)",
+      "release_date": "2026-06-02",
+      "intent": {
+        "청량_여름": "high",
+        "밴드_정체성": "high",
+        "위로_공감": "med"
+      }
+    },
+    "negane": {
+      "album_title": "네가 내 마음에 자리 잡았다 (Into You)",
+      "release_date": "2024-08-22",
+      "intent": {
+        "밴드_정체성": "high",
+        "연주_악기": "high",
+        "청량_여름": "high",
+        "보컬_라이브": "med",
+        "음악성": "med",
+        "비주얼_멤버매력": "med",
+        "장기_팬덤": "med",
+        "위로_공감": "low"
+      }
+    },
+    "everlasting": {
+      "album_title": "정규 2집 Everlasting",
+      "release_date": "2025-09-11",
+      "intent": {
+        "밴드_정체성": "high",
+        "연주_악기": "high",
+        "음악성": "high",
+        "위로_공감": "high",
+        "장기_팬덤": "high",
+        "보컬_라이브": "med",
+        "비주얼_멤버매력": "med",
+        "신규_유입": "med",
+        "이별_감성": "low"
+      }
+    },
+    "oktapbang": {
+      "album_title": "FLY HIGH PROJECT #2 옥탑방",
+      "release_date": "2019-05-15",
+      "intent": {
+        "밴드_정체성": "high",
+        "연주_악기": "high",
+        "보컬_라이브": "high",
+        "음악성": "high",
+        "장기_팬덤": "med",
+        "비주얼_멤버매력": "low",
+        "이별_감성": "low",
+        "신규_유입": "low"
+      }
+    }
+  }
+}

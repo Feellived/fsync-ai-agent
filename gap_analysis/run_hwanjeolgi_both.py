@@ -15,7 +15,7 @@ SRC     = Path("04_reaction/환절기/comments_nflying_hwanjeolgi_test_before_ex
 OUT_DIR = Path("04_reaction/환절기/output")
 OUT     = OUT_DIR / "comments_nflying_hwanjeolgi_test_before_excl_killingvoice_2026-06-26_me5_softmax.jsonl"
 
-device     = torch.device('cuda:1')
+device     = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model_name = 'intfloat/multilingual-e5-large'
 tokenizer  = AutoTokenizer.from_pretrained(model_name)
 model      = RoBERTaMultiLabel(model_name, config.NUM_LABELS).to(device)

@@ -7,3 +7,6 @@ __pycache__/
 .codex/
 *.pt
 01_corpus/artist_raw/data_sexy_old/comments.jsonl
+
+# Gap 분석 재실행 산출물
+gap_analysis/out/
