@@ -17,11 +17,15 @@ OUT_DIR = Path("04_reaction/전체/OUTPUT")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 OUT_SIG = OUT_DIR / "corpus_me5_sigmoid.jsonl"
 
+# 최종 분석 라벨 집합 — 노이즈/분석 제외 라벨 3개(기타_노이즈·비주얼_멤버매력·역주행_기대)를 뺀 9라벨.
+# 기준선(baseline)은 이 집합으로 산출해야 대상 분포와 lift 비교가 성립한다.
+LABELS_9 = ['장기_팬덤','보컬_라이브','신규_유입','밴드_정체성','위로_공감','연주_악기','이별_감성','청량_여름','음악성']
+# 초기 실험용 대안 집합
 LABELS_8 = ['비주얼_멤버매력','보컬_라이브','밴드_정체성','위로_공감','연주_악기','이별_감성','청량_여름','음악성']
 LABELS_7 = ['보컬_라이브','밴드_정체성','위로_공감','연주_악기','이별_감성','청량_여름','음악성']
 
 # ── 모델 로드 ────────────────────────────────────────────────
-device     = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device     = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model_name = 'intfloat/multilingual-e5-large'
 tokenizer  = AutoTokenizer.from_pretrained(model_name)
 model      = RoBERTaMultiLabel(model_name, config.NUM_LABELS).to(device)
@@ -71,7 +75,7 @@ print(f"\n✓ {OUT_SIG} ({len(results):,}개)", flush=True)
 def save_thresh(rows, label_set, tag, thresh):
     hits, n_hit, n_multi = [], 0, 0
     for r in rows:
-        matched = [l for l in label_set if r['sigmoid'].get(l,0) > thresh]
+        matched = [l for l in label_set if r["sigmoid"].get(l,0) >= thresh]
         if matched:
             hits.extend(matched); n_hit += 1
             if len(matched) >= 2: n_multi += 1
@@ -102,7 +106,7 @@ def save_top1(rows, label_set, tag):
     top3 = sorted(pcts.items(), key=lambda x:-x[1])[:3]
     print(f"✓ {fname.name}  top3:{top3}", flush=True)
 
-for label_set, tag in [(LABELS_8,'8label'),(LABELS_7,'7label')]:
+for label_set, tag in [(LABELS_9,'9label'),(LABELS_8,'8label'),(LABELS_7,'7label')]:
     save_thresh(results, label_set, tag, 0.80)
     save_thresh(results, label_set, tag, 0.85)
     save_top1(results, label_set, tag)

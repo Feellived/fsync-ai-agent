@@ -22,7 +22,7 @@ LABELS_8 = ['비주얼_멤버매력','보컬_라이브','밴드_정체성','위�
 ARTISTS = ['엔플라잉','QWER','CNBLUE','Day6','엑스디너리히어로즈','LUCY','FTISLAND','드래곤포니']
 
 # ── 모델 로드 ────────────────────────────────────────────────
-device     = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device     = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model_name = 'intfloat/multilingual-e5-large'
 tokenizer  = AutoTokenizer.from_pretrained(model_name)
 model      = RoBERTaMultiLabel(model_name, config.NUM_LABELS).to(device)
@@ -49,7 +49,7 @@ print({a: len(v) for a, v in by_artist.items()}, flush=True)
 def save_thresh(rows, label_set, out_path, thresh):
     hits, n_hit, n_multi = [], 0, 0
     for r in rows:
-        matched = [l for l in label_set if r['sigmoid'].get(l,0) > thresh]
+        matched = [l for l in label_set if r["sigmoid"].get(l,0) >= thresh]
         if matched:
             hits.extend(matched); n_hit += 1
             if len(matched) >= 2: n_multi += 1
